@@ -11,6 +11,7 @@ export type SweepType = 'sweep0d' | 'sweep1d' | 'sweep2d' | 'simulsweep';
  * Base parameters common to all sweep types
  */
 export interface BaseSweepParameters {
+  sweep_name?: string;
   inter_delay: number;
   save_data: boolean;
   plot_data: boolean;

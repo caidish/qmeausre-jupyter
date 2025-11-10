@@ -157,3 +157,69 @@
 .qmeasure-button-secondary:hover {
   background-color: var(--jp-layout-color3);
 }
+
+/* Form enhancements */
+.qmeasure-form-description {
+  margin: 0 0 16px 0;
+  color: var(--jp-ui-font-color2);
+  font-size: 13px;
+}
+
+.qmeasure-form h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--jp-ui-font-color0);
+}
+
+.qmeasure-form h4 {
+  margin: 16px 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--jp-ui-font-color1);
+}
+
+.qmeasure-required {
+  color: var(--jp-error-color1);
+  margin-left: 2px;
+}
+
+.qmeasure-unit {
+  color: var(--jp-ui-font-color2);
+  font-size: 11px;
+}
+
+.qmeasure-textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.qmeasure-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.qmeasure-checkbox {
+  cursor: pointer;
+}
+
+.qmeasure-form-error {
+  color: var(--jp-error-color1);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.qmeasure-form-section {
+  margin-bottom: 16px;
+}
+
+.qmeasure-form-section-title {
+  padding: 8px;
+  margin: 16px 0 8px 0;
+  background-color: var(--jp-layout-color2);
+  border-left: 3px solid var(--jp-brand-color1);
+  font-size: 13px;
+  font-weight: 600;
+}

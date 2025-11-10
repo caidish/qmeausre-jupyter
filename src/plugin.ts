@@ -9,8 +9,6 @@ import {
 
 import { INotebookTracker } from '@jupyterlab/notebook';
 
-import { ICommandPalette } from '@jupyterlab/apputils';
-
 import { SweepManagerWidget } from './components/SweepManager';
 
 /**
@@ -21,21 +19,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'JupyterLab extension for QMeasure/MeasureIt sweep management',
   autoStart: true,
   requires: [INotebookTracker],
-  optional: [ICommandPalette],
-  activate: (
-    app: JupyterFrontEnd,
-    notebookTracker: INotebookTracker,
-    palette: ICommandPalette | null
-  ) => {
+  activate: (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
     console.log('JupyterLab extension qmeasure-jupyter is activated!');
 
-    // Create the sweep manager widget
+    // Create the sweep manager widget (only once, reused across activations)
     const sweepManager = new SweepManagerWidget(notebookTracker);
     sweepManager.id = 'qmeasure-sweep-manager';
     sweepManager.title.caption = 'Sweep Manager';
+    sweepManager.title.label = 'Sweep Manager';
 
-    // Add widget to left sidebar
-    app.shell.add(sweepManager, 'left', { rank: 500 });
+    // Add widget to left sidebar only if not already attached
+    if (!sweepManager.isAttached) {
+      app.shell.add(sweepManager, 'left', { rank: 500 });
+    }
 
     // Add command to toggle visibility
     const command = 'qmeasure:toggle-sweep-manager';
@@ -43,18 +39,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
       label: 'Toggle Sweep Manager',
       execute: () => {
         if (sweepManager.isVisible) {
+          // If visible, hide it
+          sweepManager.setHidden(true);
+        } else {
+          // If hidden, show and activate it
+          sweepManager.setHidden(false);
           app.shell.activateById(sweepManager.id);
         }
       }
     });
-
-    // Add command to palette
-    if (palette) {
-      palette.addItem({
-        command,
-        category: 'QMeasure'
-      });
-    }
   }
 };
 

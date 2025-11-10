@@ -650,7 +650,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/cells@npm:^4.4.10":
+"@jupyterlab/cells@npm:^4.0.0, @jupyterlab/cells@npm:^4.4.10":
   version: 4.4.10
   resolution: "@jupyterlab/cells@npm:4.4.10"
   dependencies:
@@ -1067,7 +1067,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/toc@npm:^6.4.10":
+"@jupyterlab/toc@npm:^6.0.0, @jupyterlab/toc@npm:^6.4.10":
   version: 6.4.10
   resolution: "@jupyterlab/toc@npm:6.4.10"
   dependencies:
@@ -5774,7 +5774,9 @@ __metadata:
     "@jupyterlab/application": ^4.0.0
     "@jupyterlab/apputils": ^4.0.0
     "@jupyterlab/builder": ^4.0.0
+    "@jupyterlab/cells": ^4.0.0
     "@jupyterlab/notebook": ^4.0.0
+    "@jupyterlab/toc": ^6.0.0
     "@jupyterlab/ui-components": ^4.0.0
     "@lumino/widgets": ^2.0.0
     "@types/node": ^20.0.0
@@ -5800,6 +5802,7 @@ __metadata:
     stylelint-csstree-validator: ^3.0.0
     stylelint-prettier: ^4.0.0
     typescript: ~5.0.0
+    web-tree-sitter: ^0.20.8
     yjs: ^13.5.40
   languageName: unknown
   linkType: soft
@@ -7268,6 +7271,13 @@ __metadata:
     glob-to-regexp: ^0.4.1
     graceful-fs: ^4.1.2
   checksum: 469514a04bcdd7ea77d4b3c62d1f087eafbce64cbc728c89355d5710ee01311533456122da7c585d3654d5bfcf09e6085db1a6eb274c4762a18e370526d17561
+  languageName: node
+  linkType: hard
+
+"web-tree-sitter@npm:^0.20.8":
+  version: 0.20.8
+  resolution: "web-tree-sitter@npm:0.20.8"
+  checksum: 300c8daf438422ff92f46b3d9768d7af84c1d680331f19ce109e48b5e4e137f1be8f9e446f13fae65afabbc61b62ed1d87f942ca1ab49d1a1aa7740817f98874
   languageName: node
   linkType: hard
 
