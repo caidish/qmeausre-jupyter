@@ -4,6 +4,8 @@
 
 A JupyterLab extension providing a beginner-friendly GUI for the [MeasureIt](https://github.com/nanophys/MeasureIt) sweep measurement package.
 
+The extension is written with claude code. A TODO plan history is provided. 
+
 ## Features
 
 ### Sweep Creation
@@ -41,22 +43,7 @@ A JupyterLab extension providing a beginner-friendly GUI for the [MeasureIt](htt
 
 - JupyterLab >= 4.0.0
 - Python >= 3.8
-
-## Install
-
-To install the extension, execute:
-
-```bash
-pip install qmeasure_jupyter
-```
-
-## Uninstall
-
-To remove the extension, execute:
-
-```bash
-pip uninstall qmeasure_jupyter
-```
+- qmeasure (MeasureIt)
 
 ## Development Install
 
