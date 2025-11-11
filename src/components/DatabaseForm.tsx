@@ -5,11 +5,13 @@
 import React, { useState } from "react";
 import { FormInput } from "./FormInput";
 import { FormField } from "../types";
+import { DatabaseConfig } from "../types/queue";
 
 interface DatabaseFormProps {
   sweepName: string;
   startCode?: string | null;
   onGenerate: (code: string) => void;
+  onAddToQueue?: (dbConfig: DatabaseConfig, startCode: string | null) => void;
 }
 
 interface DatabaseParameters {
@@ -50,6 +52,7 @@ export const DatabaseForm: React.FC<DatabaseFormProps> = ({
   sweepName,
   startCode,
   onGenerate,
+  onAddToQueue,
 }) => {
   // Initialize form with default values
   const [values, setValues] = useState<Record<string, any>>(() => {
@@ -102,12 +105,13 @@ export const DatabaseForm: React.FC<DatabaseFormProps> = ({
     const expName = values.exp_name || "_required";
     const sampleName = values.sample_name || "_required";
 
+    // Use JSON.stringify to properly escape strings
     let code = `# Database initialization
 try:
     # Make sure database_name and the path are set to the correct values!
-    database_name = "${databaseName}"
-    exp_name = "${expName}"
-    sample_name = "${sampleName}"
+    database_name = ${JSON.stringify(databaseName)}
+    exp_name = ${JSON.stringify(expName)}
+    sample_name = ${JSON.stringify(sampleName)}
     init_database(database_name, exp_name, sample_name, ${sweepName})
 except:
     print("Error opening database")`;
@@ -118,6 +122,21 @@ except:
     }
 
     onGenerate(code);
+  };
+
+  const handleAddToQueue = () => {
+    if (!onAddToQueue) return;
+
+    // Validate for error display only
+    validate();
+
+    const dbConfig: DatabaseConfig = {
+      database: values.database_name || "measurement.db",
+      experiment: values.exp_name || "experiment",
+      sample: values.sample_name || "sample",
+    };
+
+    onAddToQueue(dbConfig, startCode ?? null);
   };
 
   return (
@@ -138,9 +157,20 @@ except:
         />
       ))}
 
-      <button className="qmeasure-generate-button" onClick={handleGenerate}>
-        Generate Database Init Code
-      </button>
+      <div className="qmeasure-form-actions">
+        {onAddToQueue && (
+          <button
+            className="qmeasure-button-secondary"
+            onClick={handleAddToQueue}
+            type="button"
+          >
+            Add to Queue
+          </button>
+        )}
+        <button className="qmeasure-button" onClick={handleGenerate}>
+          Generate Database Init Code
+        </button>
+      </div>
     </div>
   );
 };

@@ -17,6 +17,8 @@ import {
 
 interface SimulSweepFormProps {
   onGenerate: (params: SimulSweepParameters) => void;
+  initialState?: Partial<SimulSweepParameters>;
+  onAddToQueue?: (params: SimulSweepParameters) => void;
 }
 
 // Global sweep configuration fields
@@ -95,20 +97,75 @@ const SIMULSWEEP_GLOBAL_FIELDS: FormField[] = [
 
 export const SimulSweepForm: React.FC<SimulSweepFormProps> = ({
   onGenerate,
+  initialState,
+  onAddToQueue,
 }) => {
-  // Global sweep configuration with persistent storage
-  const [values, setValues, resetValues] = usePersistentForm(
-    "qmeasure:simulsweep",
-    getDefaultValues(SIMULSWEEP_GLOBAL_FIELDS),
+  // If initialState is provided, use it directly without localStorage persistence
+  // Otherwise use persistent form storage
+  const defaults = getDefaultValues(SIMULSWEEP_GLOBAL_FIELDS);
+  const [persistentValues, setPersistentValues, resetPersistent] =
+    usePersistentForm("qmeasure:simulsweep", defaults);
+
+  // Use initialState if provided, otherwise use persistent storage
+  const [values, setValuesState] = useState<Record<string, any>>(
+    initialState || persistentValues,
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [customParams, setCustomParams] = useState<CustomParamEntry[]>([]);
+  const [customParams, setCustomParams] = useState<CustomParamEntry[]>(
+    initialState?.custom_params || [],
+  );
 
   // SimulSweep requires exactly 2 parameters
-  const [params, setParams] = useState<SimulSweepParamEntry[]>([
-    { paramPath: "", start: 0, stop: 0, step: 0 },
-    { paramPath: "", start: 0, stop: 0, step: 0 },
-  ]);
+  const [params, setParams] = useState<SimulSweepParamEntry[]>(
+    initialState?.params || [
+      { paramPath: "", start: 0, stop: 0, step: 0 },
+      { paramPath: "", start: 0, stop: 0, step: 0 },
+    ],
+  );
+
+  // Update form when initialState changes (for editing queued sweeps)
+  React.useEffect(() => {
+    if (initialState) {
+      // Normalize follow_params: convert array to newline-separated string
+      const followParams = Array.isArray(initialState.follow_params)
+        ? initialState.follow_params.join("\n")
+        : initialState.follow_params ?? "";
+
+      setValuesState({
+        ...initialState,
+        follow_params: followParams,
+      });
+      setCustomParams(initialState.custom_params || []);
+      setParams(
+        initialState.params || [
+          { paramPath: "", start: 0, stop: 0, step: 0 },
+          { paramPath: "", start: 0, stop: 0, step: 0 },
+        ],
+      );
+    }
+  }, [initialState]);
+
+  // Wrapper around setValue that only persists if not using initialState
+  const setValues = React.useCallback(
+    (update: Partial<Record<string, any>>) => {
+      setValuesState((prev) => ({ ...prev, ...update }));
+      if (!initialState) {
+        setPersistentValues(update);
+      }
+    },
+    [initialState, setPersistentValues],
+  );
+
+  // Reset to defaults (clears localStorage)
+  const resetValues = React.useCallback(() => {
+    setValuesState(defaults);
+    setCustomParams([]);
+    setParams([
+      { paramPath: "", start: 0, stop: 0, step: 0 },
+      { paramPath: "", start: 0, stop: 0, step: 0 },
+    ]);
+    resetPersistent();
+  }, [defaults, resetPersistent]);
 
   const handleGlobalChange = (name: string, value: any) => {
     setValues({ [name]: value });
@@ -148,7 +205,7 @@ export const SimulSweepForm: React.FC<SimulSweepFormProps> = ({
 
     // Validate global fields
     SIMULSWEEP_GLOBAL_FIELDS.forEach((field) => {
-      const value = values[field.name];
+      const value = (values as any)[field.name];
 
       if (
         field.required &&
@@ -193,37 +250,50 @@ export const SimulSweepForm: React.FC<SimulSweepFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleGenerate = () => {
-    // Validate for error display
-    validate();
-
-    // Build parameters object
-    const simulSweepParams: SimulSweepParameters = {
-      sweep_name: values.sweep_name || "s_simul",
+  const serialize = (): SimulSweepParameters => {
+    const v = values as any;
+    return {
+      sweep_name: v.sweep_name || "s_simul",
       params: params.map((p) => ({
         paramPath: p.paramPath || "_required",
         start: p.start ?? 0,
         stop: p.stop ?? 0,
         step: p.step ?? 0,
       })),
-      bidirectional: values.bidirectional ?? false,
-      continual: values.continual ?? false,
-      inter_delay: values.inter_delay,
-      err: values.err ?? 0.01,
-      save_data: values.save_data ?? true,
-      plot_data: values.plot_data ?? true,
-      plot_bin: values.plot_bin,
-      suppress_output: values.suppress_output ?? false,
-      follow_params: values.follow_params
-        ? values.follow_params
+      bidirectional: v.bidirectional ?? false,
+      continual: v.continual ?? false,
+      inter_delay: v.inter_delay,
+      err: v.err ?? 0.01,
+      save_data: v.save_data ?? true,
+      plot_data: v.plot_data ?? true,
+      plot_bin: v.plot_bin,
+      suppress_output: v.suppress_output ?? false,
+      follow_params: v.follow_params
+        ? v.follow_params
             .split("\n")
             .map((p: string) => p.trim())
             .filter((p: string) => p)
         : [],
       custom_params: customParams.filter((p) => p.key.trim() !== ""),
     };
+  };
 
+  const handleGenerate = () => {
+    // Validate for error display
+    validate();
+
+    const simulSweepParams = serialize();
     onGenerate(simulSweepParams);
+  };
+
+  const handleAddToQueue = () => {
+    if (!onAddToQueue) return;
+
+    // Validate for error display only
+    validate();
+
+    const simulSweepParams = serialize();
+    onAddToQueue(simulSweepParams);
   };
 
   return (
@@ -240,7 +310,7 @@ export const SimulSweepForm: React.FC<SimulSweepFormProps> = ({
           <FormInput
             key={field.name}
             field={field}
-            value={values[field.name]}
+            value={(values as any)[field.name]}
             onChange={handleGlobalChange}
             error={errors[field.name]}
           />
@@ -359,6 +429,15 @@ export const SimulSweepForm: React.FC<SimulSweepFormProps> = ({
         >
           Reset to Defaults
         </button>
+        {onAddToQueue && (
+          <button
+            className="qmeasure-button-secondary"
+            onClick={handleAddToQueue}
+            type="button"
+          >
+            Add to Queue
+          </button>
+        )}
         <button className="qmeasure-button" onClick={handleGenerate}>
           Generate Code
         </button>

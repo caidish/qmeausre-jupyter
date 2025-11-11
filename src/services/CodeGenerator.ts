@@ -27,6 +27,65 @@ function toPython(value: any): string {
 }
 
 /**
+ * Convert custom parameter value to Python expression
+ * Intelligently quotes string-like values while preserving Python expressions
+ */
+function customParamValueToPython(value: string): string {
+  const trimmed = value.trim();
+
+  // Empty value
+  if (!trimmed) {
+    return '""';
+  }
+
+  // Already a quoted string
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed;
+  }
+
+  // Boolean literals
+  if (trimmed === "True" || trimmed === "False") {
+    return trimmed;
+  }
+
+  // None literal
+  if (trimmed === "None") {
+    return trimmed;
+  }
+
+  // Number (int or float)
+  if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // List or dict literal (starts with [ or {)
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    return trimmed;
+  }
+
+  // Function call (contains parentheses)
+  if (trimmed.includes("(") && trimmed.includes(")")) {
+    return trimmed;
+  }
+
+  // Attribute access (e.g., station.param)
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Simple identifier (variable name)
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Default: treat as string and quote it
+  return JSON.stringify(trimmed);
+}
+
+/**
  * Render sweep code segments as a complete string
  * @param code - Sweep code segments
  * @param includeStart - Whether to include the start segment (default: true)
@@ -53,11 +112,16 @@ export function generateSweep0D(params: Sweep0DParameters): SweepCode {
           .join("\n")
       : "# No follow parameters specified";
 
-  // Build custom parameters as constructor kwargs
-  const customParamsLines =
+  // Build custom parameters using .custom_param() method
+  const customParamsCode =
     params.custom_params && params.custom_params.length > 0
-      ? params.custom_params.map((cp) => `    ${cp.key}=${cp.value}`)
-      : [];
+      ? params.custom_params
+          .map(
+            (cp) =>
+              `${sweepName}.custom_param("${cp.key}", ${customParamValueToPython(cp.value)})`,
+          )
+          .join("\n")
+      : "# No custom parameters";
 
   const setup = `# Generated Sweep0D - Time-based measurement
 ${sweepName} = Sweep0D(
@@ -66,11 +130,14 @@ ${sweepName} = Sweep0D(
     plot_data=${toPython(params.plot_data ?? true)},
     save_data=${toPython(params.save_data ?? true)},
     plot_bin=${params.plot_bin ?? 1},
-    suppress_output=${toPython(params.suppress_output ?? true)}${customParamsLines.length > 0 ? ",\n" + customParamsLines.join(",\n") : ""}
+    suppress_output=${toPython(params.suppress_output ?? true)}
 )
 
 # Add parameters to follow
-${followParamsCode}`;
+${followParamsCode}
+
+# Add custom parameters
+${customParamsCode}`;
 
   const start = `# Start sweep
 ensure_qt()
@@ -91,11 +158,16 @@ export function generateSweep1D(params: Sweep1DParameters): SweepCode {
           .join("\n")
       : "# No follow parameters specified";
 
-  // Build custom parameters as constructor kwargs
-  const customParamsLines =
+  // Build custom parameters using .custom_param() method
+  const customParamsCode =
     params.custom_params && params.custom_params.length > 0
-      ? params.custom_params.map((cp) => `    ${cp.key}=${cp.value}`)
-      : [];
+      ? params.custom_params
+          .map(
+            (cp) =>
+              `${sweepName}.custom_param("${cp.key}", ${customParamValueToPython(cp.value)})`,
+          )
+          .join("\n")
+      : "# No custom parameters";
 
   const setup = `# Generated Sweep1D - Single parameter sweep
 set_param = station.${toPython(params.set_param)}
@@ -114,11 +186,14 @@ ${sweepName} = Sweep1D(
     save_data=${toPython(params.save_data ?? true)},
     plot_bin=${params.plot_bin ?? 1},
     back_multiplier=${params.back_multiplier ?? 1},
-    suppress_output=${toPython(params.suppress_output ?? true)}${customParamsLines.length > 0 ? ",\n" + customParamsLines.join(",\n") : ""}
+    suppress_output=${toPython(params.suppress_output ?? true)}
 )
 
 # Add parameters to follow
-${followParamsCode}`;
+${followParamsCode}
+
+# Add custom parameters
+${customParamsCode}`;
 
   const start = `# Start sweep
 ensure_qt()
@@ -139,11 +214,16 @@ export function generateSweep2D(params: Sweep2DParameters): SweepCode {
           .join("\n")
       : "# No follow parameters specified";
 
-  // Build custom parameters as constructor kwargs
-  const customParamsLines =
+  // Build custom parameters using .custom_param() method
+  const customParamsCode =
     params.custom_params && params.custom_params.length > 0
-      ? params.custom_params.map((cp) => `    ${cp.key}=${cp.value}`)
-      : [];
+      ? params.custom_params
+          .map(
+            (cp) =>
+              `${sweepName}.custom_param("${cp.key}", ${customParamValueToPython(cp.value)})`,
+          )
+          .join("\n")
+      : "# No custom parameters";
 
   const setup = `# Generated Sweep2D - 2D parameter sweep
 # Define inner sweep parameters
@@ -173,11 +253,14 @@ ${sweepName} = Sweep2D(
     back_multiplier=${params.back_multiplier ?? 1},
     out_ministeps=${params.out_ministeps ?? 1},
     err=${params.err ?? 0},
-    suppress_output=${toPython(params.suppress_output ?? true)}${customParamsLines.length > 0 ? ",\n" + customParamsLines.join(",\n") : ""}
+    suppress_output=${toPython(params.suppress_output ?? true)}
 )
 
 # Add parameters to follow
-${followParamsCode}`;
+${followParamsCode}
+
+# Add custom parameters
+${customParamsCode}`;
 
   const start = `# Start sweep
 ensure_qt()
@@ -197,6 +280,17 @@ export function generateSimulSweep(params: SimulSweepParameters): SweepCode {
           .map((p) => `${sweepName}.follow_param(${p})`)
           .join("\n")
       : "# No follow parameters specified";
+
+  // Build custom parameters using .custom_param() method
+  const customParamsCode =
+    params.custom_params && params.custom_params.length > 0
+      ? params.custom_params
+          .map(
+            (cp) =>
+              `${sweepName}.custom_param("${cp.key}", ${customParamValueToPython(cp.value)})`,
+          )
+          .join("\n")
+      : "# No custom parameters";
 
   // Build parameter dictionary
   const paramEntries = params.params
@@ -227,13 +321,6 @@ export function generateSimulSweep(params: SimulSweepParameters): SweepCode {
       `    "suppress_output": ${toPython(params.suppress_output)}`,
     );
 
-  // Add custom parameters to sweep_args
-  if (params.custom_params && params.custom_params.length > 0) {
-    params.custom_params.forEach((cp) => {
-      sweepArgs.push(`    "${cp.key}": ${cp.value}`);
-    });
-  }
-
   const sweepArgsDict =
     sweepArgs.length > 0 ? `sweep_args = {\n${sweepArgs.join(",\n")}\n}` : "";
 
@@ -243,7 +330,10 @@ ${paramDict}
 ${sweepArgsDict ? `${sweepArgsDict}\n\n` : ""}${sweepName} = SimulSweep(${sweepArgsDict ? "parameter_dict, **sweep_args" : "parameter_dict"})
 
 # Add parameters to follow
-${followParamsCode}`;
+${followParamsCode}
+
+# Add custom parameters
+${customParamsCode}`;
 
   const start = `# Start sweep
 ensure_qt()

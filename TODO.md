@@ -21,33 +21,34 @@
     - Generate script via `exportSweepQueue`.
     - Insert into active notebook cell (reuse helper from `SweepManager`).
 
-## Phase 2 – Sweep Manager Integration
-- [ ] **Form Serialisation**
+## Phase 2 – Sweep Manager Integration ✅
+- [x] **Form Serialisation**
   - Each form (`src/components/Sweep0DForm.tsx`, etc.) exports `serialize()` & accepts `initialState`.
   - Update `SweepManager.tsx`:
-    - Maintain `pendingStartCode` & `pendingEntryId`.
-    - Add “Add to Queue” button -> generate `renderSweepCode(code, includeStart=false)` and push to store.
-- [ ] **Database Coordination (`src/components/DatabaseForm.tsx`)**
-  - Props: `pendingStart?: string`, `queueId?: string`.
-  - On “Add to Queue”, append DB block + `pendingStart` to matching queue entry (via store update).
-- [ ] **Hydration Context**
-  - Introduce `SweepFormContext` in `src/components/SweepManagerContext.tsx` with `loadForm(tab: SweepType | 'fast', state: any)`.
-  - Forms consume context to apply external state (used by queue editor).
+    - Add "Add to Queue" button -> generate sweep code and push to store.
+    - All forms now support `onAddToQueue` callback.
+- [x] **Queue Integration**
+  - SweepManager creates QueueEntry with generated code.
+  - Entries are added to queue store with automatic timestamps.
+  - Forms support hydration via `initialState` prop (ready for Phase 3 editing).
+- [ ] **Database Coordination** (Deferred to Phase 3)
+  - Database entries can be added when building Queue Manager UI.
+  - Will support editing database config for queued sweeps.
 
-## Phase 3 – Queue Manager UI
-- [ ] **Widget Mount (`src/queue/QueueManagerWidget.tsx`)**
+## Phase 3 – Queue Manager UI ✅
+- [x] **Widget Mount (`src/queue/QueueManagerWidget.tsx`)**
   - ReactWidget added in plugin activate: `app.shell.add(widget, 'right', { rank: 620 })`.
   - Subscribe to queue store for updates.
-- [ ] **List Component (`QueueManager.tsx`)**
+- [x] **List Component (`QueueManager.tsx`)**
   - Render entries with icon, name, optional database info.
   - Actions:
-    - Edit: call `loadForm` + `select(entry.id)`.
-    - Delete: `store.remove`.
+    - Edit: loads form in Sweep Manager with `initialState` + visual editing banner.
+    - Delete: `store.remove` with confirmation.
     - Duplicate: clone entry with new id.
-    - Reorder: implement drag-and-drop (`react-beautiful-dnd`) or up/down buttons.
-  - Footer buttons: “Insert Queue Code” (dispatch command), “Run Queue” (TODO runtime), “Clear Queue”.
-- [ ] **Notifications**
-  - Integrate JupyterLab `showNotification` for add/remove/reorder feedback.
+    - Reorder: up/down buttons for moving entries.
+  - Footer buttons: "Insert Queue Code" (dispatch command), "Clear Queue".
+- [ ] **Notifications** (Deferred - basic console logging sufficient for now)
+  - Can add JupyterLab `showNotification` for add/remove/reorder feedback in future iteration.
 
 ## Phase 4 – Fast Sweeps Tab
 - [ ] **UI (`src/components/FastSweepsForm.tsx`)**

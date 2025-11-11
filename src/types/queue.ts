@@ -56,6 +56,12 @@ export interface QueueEntry {
   code: SweepCode;
 
   /**
+   * Original parameters used to generate this sweep
+   * Used for editing/hydrating forms
+   */
+  params: any;
+
+  /**
    * Optional database configuration
    */
   database?: DatabaseConfig;

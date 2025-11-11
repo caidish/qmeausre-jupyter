@@ -13,6 +13,8 @@ import {
 
 interface Sweep2DFormProps {
   onGenerate: (params: Sweep2DParameters) => void;
+  initialState?: Partial<Sweep2DParameters>;
+  onAddToQueue?: (params: Sweep2DParameters) => void;
 }
 
 const SWEEP2D_FIELDS: FormField[] = [
@@ -158,14 +160,59 @@ const SWEEP2D_FIELDS: FormField[] = [
   },
 ];
 
-export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({ onGenerate }) => {
-  // Initialize form with persistent storage
-  const [values, setValues, resetValues] = usePersistentForm(
-    "qmeasure:sweep2d",
-    getDefaultValues(SWEEP2D_FIELDS),
+export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({
+  onGenerate,
+  initialState,
+  onAddToQueue,
+}) => {
+  // If initialState is provided, use it directly without localStorage persistence
+  // Otherwise use persistent form storage
+  const defaults = getDefaultValues(SWEEP2D_FIELDS);
+  const [persistentValues, setPersistentValues, resetPersistent] =
+    usePersistentForm("qmeasure:sweep2d", defaults);
+
+  // Use initialState if provided, otherwise use persistent storage
+  const [values, setValuesState] = useState<Record<string, any>>(
+    initialState || persistentValues,
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [customParams, setCustomParams] = useState<CustomParamEntry[]>([]);
+  const [customParams, setCustomParams] = useState<CustomParamEntry[]>(
+    initialState?.custom_params || [],
+  );
+
+  // Update form when initialState changes (for editing queued sweeps)
+  React.useEffect(() => {
+    if (initialState) {
+      // Normalize follow_params: convert array to newline-separated string
+      const followParams = Array.isArray(initialState.follow_params)
+        ? initialState.follow_params.join("\n")
+        : initialState.follow_params ?? "";
+
+      setValuesState({
+        ...initialState,
+        follow_params: followParams,
+      });
+      setCustomParams(initialState.custom_params || []);
+    }
+  }, [initialState]);
+
+  // Wrapper around setValue that only persists if not using initialState
+  const setValues = React.useCallback(
+    (update: Partial<Record<string, any>>) => {
+      setValuesState((prev) => ({ ...prev, ...update }));
+      if (!initialState) {
+        setPersistentValues(update);
+      }
+    },
+    [initialState, setPersistentValues],
+  );
+
+  // Reset to defaults (clears localStorage)
+  const resetValues = React.useCallback(() => {
+    setValuesState(defaults);
+    setCustomParams([]);
+    resetPersistent();
+  }, [defaults, resetPersistent]);
 
   const handleChange = (name: string, value: any) => {
     setValues({ [name]: value });
@@ -182,7 +229,7 @@ export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({ onGenerate }) => {
     const newErrors: Record<string, string> = {};
 
     SWEEP2D_FIELDS.forEach((field) => {
-      const value = values[field.name];
+      const value = (values as any)[field.name];
 
       if (
         field.required &&
@@ -205,40 +252,53 @@ export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({ onGenerate }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleGenerate = () => {
-    // Validate for error display only, don't block generation
-    validate();
-
-    // Build parameters - missing required fields will use _required placeholder in code generation
-    const params: Sweep2DParameters = {
-      sweep_name: values.sweep_name,
-      in_param: values.in_param,
-      in_start: values.in_start,
-      in_stop: values.in_stop,
-      in_step: values.in_step,
-      out_param: values.out_param,
-      out_start: values.out_start,
-      out_stop: values.out_stop,
-      out_step: values.out_step,
-      inter_delay: values.inter_delay,
-      outer_delay: values.outer_delay,
-      out_ministeps: values.out_ministeps,
-      err: values.err,
-      back_multiplier: values.back_multiplier,
-      save_data: values.save_data,
-      plot_data: values.plot_data,
-      plot_bin: values.plot_bin,
-      suppress_output: values.suppress_output,
-      follow_params: values.follow_params
-        ? values.follow_params
+  const serialize = (): Sweep2DParameters => {
+    const v = values as any;
+    return {
+      sweep_name: v.sweep_name,
+      in_param: v.in_param,
+      in_start: v.in_start,
+      in_stop: v.in_stop,
+      in_step: v.in_step,
+      out_param: v.out_param,
+      out_start: v.out_start,
+      out_stop: v.out_stop,
+      out_step: v.out_step,
+      inter_delay: v.inter_delay,
+      outer_delay: v.outer_delay,
+      out_ministeps: v.out_ministeps,
+      err: v.err,
+      back_multiplier: v.back_multiplier,
+      save_data: v.save_data,
+      plot_data: v.plot_data,
+      plot_bin: v.plot_bin,
+      suppress_output: v.suppress_output,
+      follow_params: v.follow_params
+        ? v.follow_params
             .split("\n")
             .map((p: string) => p.trim())
             .filter((p: string) => p)
         : [],
       custom_params: customParams.filter((p) => p.key.trim() !== ""),
     };
+  };
 
+  const handleGenerate = () => {
+    // Validate for error display only, don't block generation
+    validate();
+
+    const params = serialize();
     onGenerate(params);
+  };
+
+  const handleAddToQueue = () => {
+    if (!onAddToQueue) return;
+
+    // Validate for error display only
+    validate();
+
+    const params = serialize();
+    onAddToQueue(params);
   };
 
   // Group fields by their group property
@@ -268,7 +328,7 @@ export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({ onGenerate }) => {
             <FormInput
               key={field.name}
               field={field}
-              value={values[field.name]}
+              value={(values as any)[field.name]}
               onChange={handleChange}
               error={errors[field.name]}
             />
@@ -286,6 +346,15 @@ export const Sweep2DForm: React.FC<Sweep2DFormProps> = ({ onGenerate }) => {
         >
           Reset to Defaults
         </button>
+        {onAddToQueue && (
+          <button
+            className="qmeasure-button-secondary"
+            onClick={handleAddToQueue}
+            type="button"
+          >
+            Add to Queue
+          </button>
+        )}
         <button className="qmeasure-button" onClick={handleGenerate}>
           Generate Code
         </button>

@@ -10,6 +10,7 @@ import {
 import { INotebookTracker } from "@jupyterlab/notebook";
 
 import { SweepManagerWidget } from "./components/SweepManager";
+import { QueueManagerWidget } from "./queue/QueueManagerWidget";
 import { getQueueStore } from "./queue/queueStore";
 import { exportSweepQueue } from "./queue/export";
 
@@ -33,6 +34,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Add widget to left sidebar only if not already attached
     if (!sweepManager.isAttached) {
       app.shell.add(sweepManager, "left", { rank: 500 });
+    }
+
+    // Create the queue manager widget with edit callback
+    const queueManager = new QueueManagerWidget(
+      notebookTracker,
+      app.commands,
+      (entry) => {
+        // Activate the sweep manager to show the edit form
+        app.shell.activateById(sweepManager.id);
+        // Entry is already selected in the store by QueueManager
+      },
+    );
+    queueManager.id = "qmeasure-queue-manager";
+    queueManager.title.caption = "Sweep Queue";
+    queueManager.title.label = "Queue";
+
+    // Add widget to right sidebar only if not already attached
+    if (!queueManager.isAttached) {
+      app.shell.add(queueManager, "right", { rank: 620 });
     }
 
     // Add command to toggle visibility

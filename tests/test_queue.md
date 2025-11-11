@@ -23,7 +23,7 @@ for inserting queue scripts. Use the checks below to verify everything end-to-en
 Run in the JupyterLab browser console (after `jlpm build`). Because JupyterLab 4 uses ES modules, load the compiled bundle with `await import(...)`.
 
 ```javascript
-const { getQueueStore } = await import('qmeasure-jupyter/lib/queue/queueStore.js');
+const { getQueueStore } = await import('/files/qmeausre-jupyter/lib/queue/queueStore.js?cacheBust=' + Date.now());
 const store = getQueueStore();
 
 const entryA = {
@@ -78,9 +78,9 @@ const entries: QueueEntry[] = [
       start: 'ensure_qt()\ns_1D.start()',
     },
     database: {
-      name: 'MyExperiment.db',
-      sample: 'test_experiment',
-      notes: 'sample_001',
+      database: 'MyExperiment.db',
+      experiment: 'test_experiment',
+      sample: 'sample_001',
     },
     createdAt: Date.now(),
     modifiedAt: Date.now(),
@@ -120,18 +120,30 @@ Also check `exportSingleEntry(entries[0], false)` (no database/start code) and `
 ---
 
 ## Regression Notes
+
+### Phase 1
 - React import is now at the top of `src/queue/queueStore.ts` (build succeeds).
 - Timestamps are auto-managed in `addOrReplace`.
 - `move` accepts `toIndex === entries.length` to support drop-at-end scenarios.
-- Database export uses `DatabaseConfig { name, sample, notes }`.
+- Database export uses `DatabaseConfig { database, experiment, sample }`.
+
+### Phase 2
+- Sweep variable detection fixed – regex now matches sweep object assignment, not parameter assignment.
+- Generated queue scripts include smart imports based on used sweep types.
+- Custom parameters use `.custom_param(key, value)` method instead of constructor kwargs.
+- `QueueEntry` now includes `params` field to store original parameters for editing.
+- String escaping in DatabaseForm uses `JSON.stringify()` for safety.
+- Persistent form storage separated from editing state – editing queued sweeps won't pollute localStorage defaults.
+- All sweep forms support serialization, hydration, and "Add to Queue" functionality.
 
 ---
 
 ## Next Phase Preview
-Phase 2 will layer the queue UI and Sweep Manager hooks:
-- “Add to Queue” buttons in sweep forms.
-- Queue Manager widget (right sidebar) with edit/reorder/delete.
-- Form serialisation/hydration.
+Phase 3 will add the Queue Manager UI widget:
+- Right sidebar panel showing all queued sweeps.
+- Drag-and-drop reordering.
+- Edit/delete operations.
+- Visual queue management.
 
 ---
 
