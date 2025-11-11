@@ -7,6 +7,8 @@ import {
   Sweep1DParameters,
   Sweep2DParameters,
   SimulSweepParameters,
+  SweeptoParameters,
+  GateLeakageParameters,
   SweepCode,
 } from "../types";
 
@@ -334,6 +336,62 @@ ${followParamsCode}
 
 # Add custom parameters
 ${customParamsCode}`;
+
+  const start = `# Start sweep
+ensure_qt()
+${sweepName}.start()`;
+
+  return { setup, start };
+}
+
+/**
+ * Generate Sweepto code segments (fast sweep to setpoint)
+ */
+export function generateSweepto(params: SweeptoParameters): SweepCode {
+  const sweepName = params.sweep_name || "s_to";
+
+  const setup = `# Generated Sweepto - Fast sweep to setpoint
+# Get current value for reference
+set_param = station.${toPython(params.parameter_path)}
+current_value = set_param.get()
+
+${sweepName} = Sweep1D(
+    set_param=set_param,
+    start=current_value,
+    stop=${toPython(params.setpoint)},
+    step=${toPython(params.step)},
+    save_data=${toPython(params.save_data ?? false)},
+    plot_data=${toPython(params.plot_data ?? true)},
+    plot_bin=${params.plot_bin ?? 1}
+)`;
+
+  const start = `# Start sweep
+ensure_qt()
+${sweepName}.start()`;
+
+  return { setup, start };
+}
+
+/**
+ * Generate GateLeakage code segments (gate limit test)
+ */
+export function generateGateLeakage(params: GateLeakageParameters): SweepCode {
+  const sweepName = params.sweep_name || "s_gate";
+
+  const setup = `# Generated GateLeakage - Gate limit test
+set_param = station.${toPython(params.set_param)}
+track_param = station.${toPython(params.track_param)}
+
+${sweepName} = GateLeakage(
+    set_param=set_param,
+    track_param=track_param,
+    max_I=${toPython(params.max_current)},
+    limit=${toPython(params.limit)},
+    step=${toPython(params.step)},
+    inter_delay=${params.inter_delay ?? 0.01},
+    save_data=${toPython(params.save_data ?? false)},
+    plot_data=${toPython(params.plot_data ?? true)}
+)`;
 
   const start = `# Start sweep
 ensure_qt()

@@ -5,7 +5,7 @@
 /**
  * Sweep types supported by MeasureIt
  */
-export type SweepType = 'sweep0d' | 'sweep1d' | 'sweep2d' | 'simulsweep';
+export type SweepType = 'sweep0d' | 'sweep1d' | 'sweep2d' | 'simulsweep' | 'sweepto' | 'gateleakage';
 
 /**
  * Base parameters common to all sweep types
@@ -93,13 +93,43 @@ export interface SimulSweepParameters extends BaseSweepParameters {
 }
 
 /**
+ * Sweepto specific parameters (fast sweep to setpoint)
+ */
+export interface SweeptoParameters {
+  sweep_name?: string;
+  parameter_path: string;
+  setpoint: number;
+  step: number;
+  save_data: boolean;
+  plot_data: boolean;
+  plot_bin: number;
+}
+
+/**
+ * GateLeakage specific parameters (gate limit test)
+ */
+export interface GateLeakageParameters {
+  sweep_name?: string;
+  set_param: string;
+  track_param: string;
+  max_current: number;
+  limit: number;
+  step: number;
+  inter_delay: number;
+  save_data: boolean;
+  plot_data: boolean;
+}
+
+/**
  * Union type for all sweep parameters
  */
 export type SweepParameters =
   | Sweep0DParameters
   | Sweep1DParameters
   | Sweep2DParameters
-  | SimulSweepParameters;
+  | SimulSweepParameters
+  | SweeptoParameters
+  | GateLeakageParameters;
 
 /**
  * Sweep code segments for deferred start

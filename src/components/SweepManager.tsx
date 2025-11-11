@@ -11,23 +11,28 @@ import {
   Sweep1DParameters,
   Sweep2DParameters,
   SimulSweepParameters,
+  SweeptoParameters,
+  GateLeakageParameters,
 } from "../types";
 import { QueueEntry, DatabaseConfig } from "../types/queue";
 import { Sweep0DForm } from "./Sweep0DForm";
 import { Sweep1DForm } from "./Sweep1DForm";
 import { Sweep2DForm } from "./Sweep2DForm";
 import { SimulSweepForm } from "./SimulSweepForm";
+import { FastSweepsForm } from "./FastSweepsForm";
 import { DatabaseForm } from "./DatabaseForm";
 import {
   generateSweep0D,
   generateSweep1D,
   generateSweep2D,
   generateSimulSweep,
+  generateSweepto,
+  generateGateLeakage,
   renderSweepCode,
 } from "../services/CodeGenerator";
 import { getQueueStore, useQueueStore } from "../queue/queueStore";
 
-type TabType = SweepType | "database";
+type TabType = SweepType | "database" | "fastsweeps";
 
 /**
  * Props for the SweepManagerComponent
@@ -61,13 +66,9 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
       if (entry) {
         setEditingEntry(entry);
         // Switch to the appropriate tab
-        // Map fast-sweep types to future fastsweeps tab (when Phase 4 is implemented)
+        // Map fast-sweep types to fastsweeps tab
         if (entry.sweepType === "sweepto" || entry.sweepType === "gateleakage") {
-          // For now, prevent tab switch error - will be handled in Phase 4
-          console.warn(
-            `Fast sweep type "${entry.sweepType}" not yet supported for editing`,
-          );
-          setSelectedTab("sweep1d"); // Default to Sweep1D tab for now
+          setSelectedTab("fastsweeps");
         } else {
           setSelectedTab(entry.sweepType as TabType);
         }
@@ -113,26 +114,40 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
     let sweepCode;
     let sweepName = "s_1D";
 
-    switch (selectedTab as SweepType) {
-      case "sweep0d":
-        sweepCode = generateSweep0D(params as Sweep0DParameters);
-        sweepName = (params as Sweep0DParameters).sweep_name || "s_0D";
-        break;
-      case "sweep1d":
-        sweepCode = generateSweep1D(params as Sweep1DParameters);
-        sweepName = (params as Sweep1DParameters).sweep_name || "s_1D";
-        break;
-      case "sweep2d":
-        sweepCode = generateSweep2D(params as Sweep2DParameters);
-        sweepName = (params as Sweep2DParameters).sweep_name || "s_2D";
-        break;
-      case "simulsweep":
-        sweepCode = generateSimulSweep(params as SimulSweepParameters);
-        sweepName = (params as SimulSweepParameters).sweep_name || "s_simul";
-        break;
-      default:
-        alert("This sweep type is not yet implemented");
+    if (selectedTab === "fastsweeps") {
+      // Determine sweep type by checking params structure
+      if ("parameter_path" in params) {
+        sweepCode = generateSweepto(params as SweeptoParameters);
+        sweepName = (params as SweeptoParameters).sweep_name || "s_to";
+      } else if ("track_param" in params) {
+        sweepCode = generateGateLeakage(params as GateLeakageParameters);
+        sweepName = (params as GateLeakageParameters).sweep_name || "s_gate";
+      } else {
+        alert("Unknown fast sweep type");
         return;
+      }
+    } else {
+      switch (selectedTab as SweepType) {
+        case "sweep0d":
+          sweepCode = generateSweep0D(params as Sweep0DParameters);
+          sweepName = (params as Sweep0DParameters).sweep_name || "s_0D";
+          break;
+        case "sweep1d":
+          sweepCode = generateSweep1D(params as Sweep1DParameters);
+          sweepName = (params as Sweep1DParameters).sweep_name || "s_1D";
+          break;
+        case "sweep2d":
+          sweepCode = generateSweep2D(params as Sweep2DParameters);
+          sweepName = (params as Sweep2DParameters).sweep_name || "s_2D";
+          break;
+        case "simulsweep":
+          sweepCode = generateSimulSweep(params as SimulSweepParameters);
+          sweepName = (params as SimulSweepParameters).sweep_name || "s_simul";
+          break;
+        default:
+          alert("This sweep type is not yet implemented");
+          return;
+      }
     }
 
     // If save_data is true, defer start code until after database setup
@@ -197,30 +212,46 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
     let sweepName = "Sweep";
     let sweepType: QueueEntry["sweepType"] = "sweep1d";
 
-    switch (selectedTab as SweepType) {
-      case "sweep0d":
-        sweepCode = generateSweep0D(params as Sweep0DParameters);
-        sweepName = (params as Sweep0DParameters).sweep_name || "Sweep0D";
-        sweepType = "sweep0d";
-        break;
-      case "sweep1d":
-        sweepCode = generateSweep1D(params as Sweep1DParameters);
-        sweepName = (params as Sweep1DParameters).sweep_name || "Sweep1D";
-        sweepType = "sweep1d";
-        break;
-      case "sweep2d":
-        sweepCode = generateSweep2D(params as Sweep2DParameters);
-        sweepName = (params as Sweep2DParameters).sweep_name || "Sweep2D";
-        sweepType = "sweep2d";
-        break;
-      case "simulsweep":
-        sweepCode = generateSimulSweep(params as SimulSweepParameters);
-        sweepName = (params as SimulSweepParameters).sweep_name || "SimulSweep";
-        sweepType = "simulsweep";
-        break;
-      default:
-        alert("This sweep type is not yet implemented");
+    if (selectedTab === "fastsweeps") {
+      // Determine sweep type by checking params structure
+      if ("parameter_path" in params) {
+        sweepCode = generateSweepto(params as SweeptoParameters);
+        sweepName = (params as SweeptoParameters).sweep_name || "Sweepto";
+        sweepType = "sweepto";
+      } else if ("track_param" in params) {
+        sweepCode = generateGateLeakage(params as GateLeakageParameters);
+        sweepName = (params as GateLeakageParameters).sweep_name || "GateLeakage";
+        sweepType = "gateleakage";
+      } else {
+        alert("Unknown fast sweep type");
         return;
+      }
+    } else {
+      switch (selectedTab as SweepType) {
+        case "sweep0d":
+          sweepCode = generateSweep0D(params as Sweep0DParameters);
+          sweepName = (params as Sweep0DParameters).sweep_name || "Sweep0D";
+          sweepType = "sweep0d";
+          break;
+        case "sweep1d":
+          sweepCode = generateSweep1D(params as Sweep1DParameters);
+          sweepName = (params as Sweep1DParameters).sweep_name || "Sweep1D";
+          sweepType = "sweep1d";
+          break;
+        case "sweep2d":
+          sweepCode = generateSweep2D(params as Sweep2DParameters);
+          sweepName = (params as Sweep2DParameters).sweep_name || "Sweep2D";
+          sweepType = "sweep2d";
+          break;
+        case "simulsweep":
+          sweepCode = generateSimulSweep(params as SimulSweepParameters);
+          sweepName = (params as SimulSweepParameters).sweep_name || "SimulSweep";
+          sweepType = "simulsweep";
+          break;
+        default:
+          alert("This sweep type is not yet implemented");
+          return;
+      }
     }
 
     // If editing an existing entry, update it; otherwise create new
@@ -269,8 +300,15 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
 
   const renderForm = () => {
     // Extract initialState from editing entry if present
+    // For fast sweeps, check if editingEntry is sweepto or gateleakage
+    const isEditingFastSweep =
+      editingEntry &&
+      (editingEntry.sweepType === "sweepto" ||
+        editingEntry.sweepType === "gateleakage");
     const initialState =
-      editingEntry && editingEntry.sweepType === selectedTab
+      editingEntry &&
+      (editingEntry.sweepType === selectedTab ||
+        (selectedTab === "fastsweeps" && isEditingFastSweep))
         ? editingEntry.params
         : undefined;
 
@@ -302,6 +340,14 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
       case "simulsweep":
         return (
           <SimulSweepForm
+            onGenerate={handleGenerate}
+            onAddToQueue={handleAddToQueue}
+            initialState={initialState}
+          />
+        );
+      case "fastsweeps":
+        return (
+          <FastSweepsForm
             onGenerate={handleGenerate}
             onAddToQueue={handleAddToQueue}
             initialState={initialState}
@@ -368,6 +414,12 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
           onClick={() => setSelectedTab("simulsweep")}
         >
           SimulSweep
+        </button>
+        <button
+          className={`qmeasure-tab ${selectedTab === "fastsweeps" ? "active" : ""}`}
+          onClick={() => setSelectedTab("fastsweeps")}
+        >
+          Fast Sweeps
         </button>
         <button
           className={`qmeasure-tab ${selectedTab === "database" ? "active" : ""}`}

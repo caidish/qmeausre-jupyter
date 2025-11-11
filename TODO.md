@@ -50,26 +50,29 @@
 - [ ] **Notifications** (Deferred - basic console logging sufficient for now)
   - Can add JupyterLab `showNotification` for add/remove/reorder feedback in future iteration.
 
-## Phase 4 – Fast Sweeps Tab
-- [ ] **UI (`src/components/FastSweepsForm.tsx`)**
-  - Add new tab in `SweepManager.tsx` named “Fast Sweeps”.
+## Phase 4 – Fast Sweeps Tab ✅
+- [x] **UI (`src/components/FastSweepsForm.tsx`)**
+  - Add new tab in `SweepManager.tsx` named "Fast Sweeps".
   - Provide selector between:
-    1. **Sweepto** – fields: `parameterPath`, `setpoint`, `step`.
+    1. **Sweepto** – fields: `parameter_path`, `setpoint`, `step`.
        - Generate Sweep1D using `station.{parameter}`; comment includes `current_value = station...get()`.
        - Defaults: `save_data=False`, `plot_data=True`, `plot_bin=1`.
-    2. **GateLimitTest** – inputs as per quick-start (set param, track param, `max_I`, `limit`, `step`, `inter_delay`); emit GateLeakage snippet.
+    2. **GateLeakage** – inputs (set_param, track_param, `max_current`, `limit`, `step`, `inter_delay`); emit GateLeakage snippet.
   - Both options deliver `SweepCode` + integration with Add-to-Queue.
-- [ ] **Code Generators (`src/services/CodeGenerator.ts`)**
+- [x] **Code Generators (`src/services/CodeGenerator.ts`)**
   - Add `generateSweepto(params)` and `generateGateLeakage(params)` returning `{ setup, start }`.
   - Update exports & type definitions in `src/types/index.d.ts`.
 
-## Phase 5 – Parser & Details Panel
+## Phase 5 – Parser, Details Panel, and Queue Analytics
 - [ ] **Tree-Sitter Enhancements (`src/toc/parser.ts`)**
-  - Detect queue scripts (`SweepQueue()` pattern) and map sweeps back to queue entries via comments or generated identifiers.
-  - Ensure fast sweep templates parse (positional args).
+  - Detect queue definitions (`SweepQueue()` and `sq += ...`) and map sweeps back to queue entries (use comment markers or generated IDs).
+  - Support fast sweep templates (Sweepto/GateLeakage positional args).
 - [ ] **Details Panel (`src/toc/panel.tsx`)**
-  - Display “Queued (position N)” badge when sweep belongs to queue.
-  - Show database info if associated.
+  - Display “Queued (position N)” badge when a sweep originates from the queue.
+  - Show database target and any loop/function context (from `TODO_enhanced_queue.md` ideas).
+- [ ] **Queue Analytics (optional)**
+  - Surface queue summary in details panel (total sweeps, loops, function callbacks).
+  - (Deferred) ready to integrate loop/function metadata once implemented.
 
 ## Phase 6 – Testing & Documentation
 - [ ] **Automated Tests**
