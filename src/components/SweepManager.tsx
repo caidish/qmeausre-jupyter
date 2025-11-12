@@ -54,6 +54,7 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
   const [lastQueuedEntryId, setLastQueuedEntryId] = useState<string | null>(
     null,
   );
+  const [lastQueuedEntryPath, setLastQueuedEntryPath] = useState<string[]>([]);
 
   // Shared parameters for all sweeps
   const [followParams, setFollowParams] = useState<string>("");
@@ -70,8 +71,9 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
   // Watch for queue entry selection (for editing)
   React.useEffect(() => {
     if (selectedId) {
-      const entry = entries.find((e: QueueEntry) => e.id === selectedId);
-      if (entry) {
+      const entry = entries.find((e) => e.id === selectedId);
+      // Only handle sweep entries for editing
+      if (entry && entry.queueType === 'sweep') {
         setEditingEntry(entry);
         // Switch to the appropriate tab
         // Map fast-sweep types to fastsweeps tab
@@ -183,6 +185,10 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
     } else {
       setPendingStartCode(null);
     }
+
+    // Clear any queue tracking state (handleGenerate is not queue-related)
+    setLastQueuedEntryId(null);
+    setLastQueuedEntryPath([]);
   };
 
   const handleDatabaseGenerate = (code: string) => {
@@ -199,10 +205,26 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
     }
 
     const queueStore = getQueueStore();
-    const entry = queueStore.getEntry(lastQueuedEntryId);
+
+    // Try to retrieve by path first (more reliable for nested entries)
+    let entry: QueueEntry | undefined;
+    if (lastQueuedEntryPath.length > 0) {
+      const fullPath = [...lastQueuedEntryPath, lastQueuedEntryId];
+      const item = queueStore.getItemByPath(fullPath);
+      if (item && item.queueType === 'sweep') {
+        entry = item;
+      }
+    } else {
+      // Fall back to ID-based search (for root-level entries)
+      const item = queueStore.getEntry(lastQueuedEntryId);
+      if (item && item.queueType === 'sweep') {
+        entry = item;
+      }
+    }
 
     if (!entry) {
       console.error(`Queue entry ${lastQueuedEntryId} not found`);
+      alert(`Error: Could not find sweep entry to update with database config`);
       return;
     }
 
@@ -219,10 +241,13 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
 
     queueStore.addOrReplace(updatedEntry);
 
-    console.log(`Updated queue entry "${entry.name}" with database config`);
+    const location = lastQueuedEntryPath.length > 0 ? "in loop" : "in queue";
+    console.log(`Updated sweep "${entry.name}" ${location} with database config:`, dbConfig);
+    alert(`✅ Database config added to sweep "${entry.name}"`);
 
     // Clear the pending state
     setLastQueuedEntryId(null);
+    setLastQueuedEntryPath([]);
     setPendingStartCode(null);
   };
 
@@ -288,6 +313,7 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
     const queueEntry: QueueEntry = editingEntry
       ? {
           ...editingEntry,
+          queueType: 'sweep',
           name: sweepName,
           sweepType: sweepType,
           code: sweepCode,
@@ -296,6 +322,7 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
         }
       : {
           id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          queueType: 'sweep',
           name: sweepName,
           sweepType: sweepType,
           code: sweepCode,
@@ -306,24 +333,54 @@ const SweepManagerComponent: React.FC<SweepManagerComponentProps> = ({
 
     // Add/update in queue store
     const queueStore = getQueueStore();
-    queueStore.addOrReplace(queueEntry);
+
+    // Check if we should add to a target loop
+    const targetLoop = queueStore.getTargetLoop();
+    let entryPath: string[] = [];
+
+    if (targetLoop && !editingEntry) {
+      // Add to loop instead of root
+      queueStore.addToLoop(targetLoop, queueEntry);
+      // Clear target loop after adding
+      queueStore.setTargetLoop(undefined);
+
+      // Get path to the target loop (for database update tracking)
+      const targetLoopPath = queueStore.getPathToItem(targetLoop);
+      if (targetLoopPath !== undefined) {
+        entryPath = [...targetLoopPath, targetLoop];
+      }
+
+      console.log(`Added "${sweepName}" to loop`);
+    } else {
+      queueStore.addOrReplace(queueEntry);
+
+      // Get path for the entry (in case it was edited and is nested)
+      if (editingEntry) {
+        const path = queueStore.getPathToItem(queueEntry.id);
+        if (path !== undefined) {
+          entryPath = path;
+        }
+      }
+
+      console.log(
+        `${editingEntry ? "Updated" : "Added"} "${sweepName}" ${editingEntry ? "in" : "to"} queue`,
+      );
+    }
 
     // Clear editing state and deselect
     setEditingEntry(null);
     queueStore.select(undefined);
 
-    console.log(
-      `${editingEntry ? "Updated" : "Added"} "${sweepName}" ${editingEntry ? "in" : "to"} queue`,
-    );
-
     // If save_data is enabled, switch to database tab for configuration
     if (sharedSaveData && sweepCode.start) {
       setLastQueuedEntryId(queueEntry.id); // Store for DB config update
+      setLastQueuedEntryPath(entryPath); // Store path for nested entries
       setPendingStartCode(sweepCode.start);
       setSelectedTab("database");
     } else {
       // Clear any pending database config
       setLastQueuedEntryId(null);
+      setLastQueuedEntryPath([]);
       setPendingStartCode(null);
     }
   };

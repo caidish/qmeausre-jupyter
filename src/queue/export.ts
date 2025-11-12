@@ -1,8 +1,23 @@
 /**
- * Export queue entries to MeasureIt Python code
+ * Export queue entries to MeasureIt Python code (with loop and function support)
  */
 
-import { QueueEntry, DatabaseConfig } from "../types/queue";
+import {
+  QueueItem,
+  QueueSweepEntry,
+  QueueFunctionEntry,
+  QueueLoopEntry,
+  DatabaseConfig,
+  isSweepEntry,
+  isFunctionEntry,
+  isLoopEntry,
+} from "../types/queue";
+import {
+  indentCode,
+  generateFunctionName,
+  generateLoopVarName,
+  escapePythonString,
+} from "./exportHelpers";
 
 /**
  * Generate DatabaseEntry Python code
@@ -35,51 +50,246 @@ function generateVarName(name: string, index: number): string {
 }
 
 /**
+ * Export context for tracking state during recursive export
+ */
+interface ExportContext {
+  indentLevel: number;
+  sweepVarNames: Map<string, string>; // id -> variable name
+  functionNames: Map<string, string>; // id -> function name
+  sweepCounter: { value: number }; // Wrap in object for pass-by-reference
+}
+
+/**
+ * Export a single queue item (recursive for loops)
+ * @param item - Queue item to export
+ * @param ctx - Export context
+ * @returns Array of code sections
+ */
+function exportItem(item: QueueItem, ctx: ExportContext): string[] {
+  if (isSweepEntry(item)) {
+    return exportSweepEntry(item, ctx);
+  } else if (isFunctionEntry(item)) {
+    return exportFunctionEntry(item, ctx);
+  } else if (isLoopEntry(item)) {
+    return exportLoopEntry(item, ctx);
+  }
+  return [];
+}
+
+/**
+ * Export a sweep entry
+ */
+function exportSweepEntry(entry: QueueSweepEntry, ctx: ExportContext): string[] {
+  const sections: string[] = [];
+  const varName = generateVarName(entry.name, ctx.sweepCounter.value++);
+  ctx.sweepVarNames.set(entry.id, varName);
+
+  // Setup code
+  sections.push(`# ${entry.name} (${entry.sweepType})`);
+  let setupCode = entry.code.setup;
+
+  // Replace sweep variable name
+  const sweepVarMatch = setupCode.match(/^(\w+)\s*=\s*Sweep/m);
+  if (sweepVarMatch && sweepVarMatch[1]) {
+    const originalVar = sweepVarMatch[1];
+    setupCode = setupCode.replace(
+      new RegExp(`\\b${originalVar}\\b`, "g"),
+      varName,
+    );
+  }
+
+  sections.push(indentCode(setupCode, ctx.indentLevel));
+  sections.push("");
+
+  // Queue append
+  if (entry.database) {
+    const dbEntry = generateDatabaseEntry(entry.database);
+    sections.push(
+      indentCode(`sq.append((${dbEntry}, ${varName}))`, ctx.indentLevel),
+    );
+  } else {
+    sections.push(indentCode(`sq.append(${varName})`, ctx.indentLevel));
+  }
+  sections.push("");
+
+  return sections;
+}
+
+/**
+ * Export a function entry
+ */
+function exportFunctionEntry(entry: QueueFunctionEntry, ctx: ExportContext): string[] {
+  const sections: string[] = [];
+  const funcName = generateFunctionName(entry.id);
+  ctx.functionNames.set(entry.id, funcName);
+
+  // Only append to queue - function definition is handled by collectFunctionDefinitions
+  sections.push(`# ${entry.name}`);
+  sections.push(indentCode(`sq.append(${funcName})`, ctx.indentLevel));
+  sections.push("");
+
+  return sections;
+}
+
+/**
+ * Export a loop entry (recursive)
+ */
+function exportLoopEntry(entry: QueueLoopEntry, ctx: ExportContext): string[] {
+  const sections: string[] = [];
+
+  // Loop header
+  sections.push(`# Loop: ${entry.name}`);
+
+  if (entry.loopKind === 'repeat') {
+    const loopVar = generateLoopVarName(entry.id, 'repeat');
+    const count = entry.count || 1;
+    sections.push(indentCode(`for ${loopVar} in range(${count}):`, ctx.indentLevel));
+  } else {
+    // values loop
+    const loopVar = entry.loopVarName || generateLoopVarName(entry.id, 'values');
+    const values = entry.values || [];
+    const valuesList = values.join(", ");
+    sections.push(indentCode(`for ${loopVar} in [${valuesList}]:`, ctx.indentLevel));
+  }
+
+  // Export loop body with increased indent
+  const bodyCtx: ExportContext = {
+    ...ctx,
+    indentLevel: ctx.indentLevel + 1,
+  };
+
+  entry.body.forEach((bodyItem) => {
+    const bodySections = exportItem(bodyItem, bodyCtx);
+    sections.push(...bodySections);
+  });
+
+  sections.push("");
+  return sections;
+}
+
+/**
+ * Collect all function definitions from queue
+ * Functions need to be defined before queue construction
+ */
+function collectFunctionDefinitions(entries: QueueItem[]): string[] {
+  const sections: string[] = [];
+  const ctx: ExportContext = {
+    indentLevel: 0,
+    sweepVarNames: new Map(),
+    functionNames: new Map(),
+    sweepCounter: { value: 0 },
+  };
+
+  const traverse = (items: QueueItem[]) => {
+    items.forEach((item) => {
+      if (isFunctionEntry(item)) {
+        const funcName = generateFunctionName(item.id);
+        ctx.functionNames.set(item.id, funcName);
+
+        sections.push(`# ${item.name}`);
+        sections.push(`def ${funcName}():`);
+
+        const userCode = item.pythonCode.trim();
+        if (userCode) {
+          sections.push(indentCode(userCode, 1));
+        } else {
+          sections.push("    pass");
+        }
+        sections.push("");
+      } else if (isLoopEntry(item)) {
+        traverse(item.body);
+      }
+    });
+  };
+
+  traverse(entries);
+  return sections;
+}
+
+/**
+ * Collect required imports from queue
+ */
+function collectImports(entries: QueueItem[]): {
+  sweepTypes: Set<string>;
+  needsDatabase: boolean;
+  hasFunctions: boolean;
+} {
+  const sweepTypes = new Set<string>();
+  let needsDatabase = false;
+  let hasFunctions = false;
+
+  const traverse = (items: QueueItem[]) => {
+    items.forEach((item) => {
+      if (isSweepEntry(item)) {
+        switch (item.sweepType) {
+          case "sweep0d":
+            sweepTypes.add("Sweep0D");
+            break;
+          case "sweep1d":
+            sweepTypes.add("Sweep1D");
+            break;
+          case "sweep2d":
+            sweepTypes.add("Sweep2D");
+            break;
+          case "simulsweep":
+            sweepTypes.add("SimulSweep");
+            break;
+          case "gateleakage":
+            sweepTypes.add("GateLeakage");
+            break;
+        }
+        if (item.database) {
+          needsDatabase = true;
+        }
+      } else if (isFunctionEntry(item)) {
+        hasFunctions = true;
+      } else if (isLoopEntry(item)) {
+        traverse(item.body);
+      }
+    });
+  };
+
+  traverse(entries);
+  return { sweepTypes, needsDatabase, hasFunctions };
+}
+
+/**
  * Export queue entries to executable Python code
  * @param entries - Queue entries to export
  * @returns Complete Python script
  */
-export function exportSweepQueue(entries: QueueEntry[]): string {
+export function exportSweepQueue(entries: QueueItem[]): string {
   if (entries.length === 0) {
     return "# Empty queue - no sweeps to run\n";
   }
 
   const sections: string[] = [];
 
-  // Determine which sweep types are used for imports
-  const sweepTypes = new Set<string>();
-  entries.forEach((entry) => {
-    switch (entry.sweepType) {
-      case "sweep0d":
-        sweepTypes.add("Sweep0D");
-        break;
-      case "sweep1d":
-        sweepTypes.add("Sweep1D");
-        break;
-      case "sweep2d":
-        sweepTypes.add("Sweep2D");
-        break;
-      case "simulsweep":
-        sweepTypes.add("SimulSweep");
-        break;
-      case "gateleakage":
-        sweepTypes.add("GateLeakage");
-        break;
-    }
-  });
-
-  const needsDatabase = entries.some((e) => e.database);
+  // Collect imports
+  const { sweepTypes, needsDatabase, hasFunctions } = collectImports(entries);
   const sweepImports = Array.from(sweepTypes).sort().join(", ");
 
-  // Header with full imports for runnable script
+  // Build import lines conditionally
+  const imports: string[] = [];
+  imports.push("from measureit.tools.sweep_queue import SweepQueue" + (needsDatabase ? ", DatabaseEntry" : ""));
+
+  // Only add sweep class imports if we have sweeps
+  if (sweepImports) {
+    imports.push("from measureit import " + sweepImports + (needsDatabase && !sweepImports.includes("get_path") ? ", get_path" : needsDatabase ? "" : ""));
+  } else if (needsDatabase) {
+    // Only database is needed, no sweep classes
+    imports.push("from measureit import get_path");
+  }
+
+  imports.push("from measureit.tools import ensure_qt");
+  imports.push("import qcodes as qc");
+
+  // Header
   sections.push(`# Generated Sweep Queue
 # Generated by QMeasure Jupyter Extension
-# Total sweeps: ${entries.length}
+# Total entries: ${entries.length}
 
-from measureit.tools.sweep_queue import SweepQueue${needsDatabase ? ", DatabaseEntry" : ""}
-from measureit import ${sweepImports}${needsDatabase ? ", get_path" : ""}
-from measureit.tools import ensure_qt
-import qcodes as qc
+${imports.join("\n")}
 
 # Initialize station
 station = qc.Station.default
@@ -89,55 +299,33 @@ ensure_qt()
 
 `);
 
-  // Generate setup code for each sweep
-  sections.push("# ===== Sweep Setup =====\n");
+  // Function definitions (if any)
+  const functionDefs = collectFunctionDefinitions(entries);
+  if (functionDefs.length > 0) {
+    sections.push("# ===== Function Definitions =====\n");
+    sections.push(...functionDefs);
+  }
 
-  entries.forEach((entry, index) => {
-    const varName = generateVarName(entry.name, index);
-    sections.push(`# ${index + 1}. ${entry.name} (${entry.sweepType})`);
-
-    // Replace the sweep variable name with our generated one
-    // Look for pattern like "s_1D = Sweep1D(...)" not "set_param = ..."
-    let setupCode = entry.code.setup;
-
-    // Find the line that creates the sweep object (e.g., s_1D = Sweep1D(...))
-    const sweepVarMatch = setupCode.match(/^(\w+)\s*=\s*Sweep/m);
-    if (sweepVarMatch && sweepVarMatch[1]) {
-      const originalVar = sweepVarMatch[1];
-      // Replace all occurrences of the original sweep variable with our generated one
-      setupCode = setupCode.replace(
-        new RegExp(`\\b${originalVar}\\b`, "g"),
-        varName,
-      );
-    }
-
-    sections.push(setupCode);
-    sections.push("");
-  });
-
-  // Build the queue
+  // Sweep setup and queue construction
   sections.push("# ===== Build Queue =====\n");
   sections.push("sq = SweepQueue()\n");
 
-  entries.forEach((entry, index) => {
-    const varName = generateVarName(entry.name, index);
+  // Export all entries
+  const ctx: ExportContext = {
+    indentLevel: 0,
+    sweepVarNames: new Map(),
+    functionNames: new Map(),
+    sweepCounter: { value: 0 },
+  };
 
-    if (entry.database) {
-      // Add with database entry
-      const dbEntry = generateDatabaseEntry(entry.database);
-      sections.push(`# Add sweep ${index + 1}: ${entry.name}`);
-      sections.push(`sq += (${dbEntry}, ${varName})`);
-    } else {
-      // Add without database entry
-      sections.push(`# Add sweep ${index + 1}: ${entry.name}`);
-      sections.push(`sq += ${varName}`);
-    }
-    sections.push("");
+  entries.forEach((entry) => {
+    const entrySections = exportItem(entry, ctx);
+    sections.push(...entrySections);
   });
 
   // Start the queue
   sections.push("# ===== Run Queue =====\n");
-  sections.push('print(f"Starting queue with {len(sq)} sweeps...")');
+  sections.push('print(f"Starting queue with {len(sq)} entries...")');
   sections.push("sq.start()");
   sections.push('print("Queue completed!")');
 
@@ -146,35 +334,46 @@ ensure_qt()
 
 /**
  * Export a single entry with optional database configuration
- * @param entry - Queue entry
+ * @param entry - Queue item
  * @param includeStart - Whether to include the start code (default: true)
  * @returns Python code string
  */
 export function exportSingleEntry(
-  entry: QueueEntry,
+  entry: QueueItem,
   includeStart: boolean = true,
 ): string {
   const sections: string[] = [];
 
-  // Header
-  sections.push(`# ${entry.name} (${entry.sweepType})`);
-  sections.push("");
-
-  // Setup code
-  sections.push(entry.code.setup);
-  sections.push("");
-
-  // Database entry if present
-  if (entry.database && includeStart) {
-    sections.push("# Database configuration");
-    const dbEntry = generateDatabaseEntry(entry.database);
-    sections.push(`db_entry = ${dbEntry}`);
+  if (isSweepEntry(entry)) {
+    sections.push(`# ${entry.name} (${entry.sweepType})`);
     sections.push("");
-  }
+    sections.push(entry.code.setup);
+    sections.push("");
 
-  // Start code if requested
-  if (includeStart) {
-    sections.push(entry.code.start);
+    if (entry.database && includeStart) {
+      sections.push("# Database configuration");
+      const dbEntry = generateDatabaseEntry(entry.database);
+      sections.push(`db_entry = ${dbEntry}`);
+      sections.push("");
+    }
+
+    if (includeStart) {
+      sections.push(entry.code.start);
+    }
+  } else if (isFunctionEntry(entry)) {
+    const funcName = generateFunctionName(entry.id);
+    sections.push(`# ${entry.name} (function)`);
+    sections.push("");
+    sections.push(`def ${funcName}():`);
+    sections.push(indentCode(entry.pythonCode.trim() || "pass", 1));
+
+    if (includeStart) {
+      sections.push("");
+      sections.push(`${funcName}()`);
+    }
+  } else if (isLoopEntry(entry)) {
+    sections.push(`# ${entry.name} (loop - cannot export single loop)`);
+    sections.push("# Use 'Export Queue' to export complete loop structure");
   }
 
   return sections.join("\n");
